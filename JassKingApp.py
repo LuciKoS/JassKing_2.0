@@ -81,7 +81,7 @@ class JassKingApp():
 
     def upload_image(self):
         file_path = filedialog.askopenfilename(
-            title = "Select an image",
+            title = "Select an image pls",
             filetypes=[("Image Files", ("*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif"))]
         )
 
