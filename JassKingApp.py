@@ -58,6 +58,45 @@ cards_nums = {
     "Si_A": 35,
 }
 
+cards_images = {
+    "Ei_6": "card_images/img_0.jpg",
+    "Ei_7": "card_images/img_1.jpg",
+    "Ei_8": "card_images/img_2.jpg",
+    "Ei_9": "card_images/img_3.jpg",
+    "Ei_10": "card_images/img_4.jpg",
+    "Ei_U": "card_images/img_5.jpg",
+    "Ei_O": "card_images/img_6.jpg",
+    "Ei_K": "card_images/img_7.jpg",
+    "Ei_A": "card_images/img_8.jpg",
+    "Ro_6": "card_images/img_9.jpg",
+    "Ro_7": "card_images/img_10.jpg",
+    "Ro_8": "card_images/img_11.jpg",
+    "Ro_9": "card_images/img_12.jpg",
+    "Ro_10": "card_images/img_13.jpg",
+    "Ro_U": "card_images/img_14.jpg",
+    "Ro_O": "card_images/img_15.jpg",
+    "Ro_K": "card_images/img_16.jpg",
+    "Ro_A": "card_images/img_17.jpg",
+    "Se_6": "card_images/img_18.jpg",
+    "Se_7": "card_images/img_19.jpg",
+    "Se_8": "card_images/img_20.jpg",
+    "Se_9": "card_images/img_21.jpg",
+    "Se_10": "card_images/img_22.jpg",
+    "Se_U": "card_images/img_23.jpg",
+    "Se_O": "card_images/img_24.jpg",
+    "Se_K": "card_images/img_25.jpg",
+    "Se_A": "card_images/img_26.jpg",
+    "Si_6": "card_images/img_27.jpg",
+    "Si_7": "card_images/img_28.jpg",
+    "Si_8": "card_images/img_29.jpg",
+    "Si_9": "card_images/img_30.jpg",
+    "Si_10": "card_images/img_31.jpg",
+    "Si_U": "card_images/img_32.jpg",
+    "Si_O": "card_images/img_33.jpg",
+    "Si_K": "card_images/img_34.jpg",
+    "Si_A": "card_images/img_35.jpg",
+}
+
 #Creating App Class
 
 class JassKingApp():
@@ -94,6 +133,57 @@ class JassKingApp():
             self.image_label.config(image = tk_img)
             self.image_label.image = tk_img
 
+
+            cards = image_model(img, imgsz=640, conf=0.3)
+            
+            detections = []
+
+            for card in cards :
+                for box in card.boxes:
+
+                    conf = float(box.conf[0]) if hasattr(box.conf, '__len__') else float(box.conf)
+                    cls_id = int(box.cls[0]) if hasattr(box.cls, '__len__') else int(box.cls)
+
+                    label = image_model.model.names[cls_id]
+                    detections.append([label, conf])
+
+            detections.sort(key = lambda x: x[1], reverse = True)
+            top_detections = detections[:9]
+
+            mapped_cards = []
+            for card in top_detections:
+                mapped_cards.append(cards_nums.get(card[0], -1))
+
+            if len(mapped_cards) == 9:
+                try:
+                    trumpf_prediction = trumpf_model.predict_proba([mapped_cards])[0]
+                    top3 = trumpf_prediction.argsort()[-3:][::-1]
+                except:
+                    trumpf_predictions = None
+            else:
+                trumpf_predictions = None
+
+
+            cards_frame = tk.Frame(self.master)
+            cards_frame.pack(pady=10)
+
+            for card, conf in top_detections:
+                img_path = cards_images.get(card)
+                card_img = Image.open(img_path)
+                card_img.thumbnail((100, 150), Image.Resampling.LANCZOS)
+                tk_card_img = ImageTk.PhotoImage(card_img)
+                card_label = tk.Label(cards_frame, image=tk_card_img)
+                card_label.image = tk_card_img
+                card_label.pack(side=tk.LEFT, padx=5)
+
+            if len(mapped_cards) == 9:
+                cards_array = np.array(mapped_cards).reshape(1, -1)
+                trumpf_prediction = trumpf_model.predict(cards_array)
+                messagebox.showinfo("Trumpf Model Prediction", f"Prediction: {trumpf_prediction}")
+            else:
+                messagebox.showwarning("Invalid Card Detection", "Not all detected cards are valid for trumpf prediction.")
+
+        
 
 
 if __name__ == "__main__":
