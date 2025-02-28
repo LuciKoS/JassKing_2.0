@@ -101,90 +101,95 @@ cards_images = {
 
 class JassKingApp():
     def __init__(self, master):
-
         self.master = master
-
         master.title("Jass King App")
-
         master.geometry("800x600")
-
-        self.image_label = tk.Label(master)
-        self.image_label.pack(pady = 10)
-
-        self.upload_button = tk.Button(master, text = "Upload your hand", command = self.upload_image)
-        self.upload_button.pack(pady = 10)
-
-
-
-
+        
+        self.canvas_width = 800
+        self.canvas_height = 600
+        self.canvas = tk.Canvas(master, width=self.canvas_width, height=self.canvas_height)
+        self.canvas.place(relx=0.5, rely=0.5, anchor="center")
+        
+        bg_image = Image.open("/Users/lucbaumeler/Downloads/bg3.png")
+        bg_image = bg_image.resize((self.canvas_width, self.canvas_height), Image.Resampling.LANCZOS)
+        self.bg_photo = ImageTk.PhotoImage(bg_image)
+        self.canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
+        
+        # Upload button below the canvas
+        self.upload_button = tk.Button(master, text="Upload your hand", command=self.upload_image)
+        self.upload_button.pack(pady=10)
+        
+        self.card_items = []
+        self.card_photos = []
 
     def upload_image(self):
+        # Clear previous card images from the canvas
+        for item in self.card_items:
+            self.canvas.delete(item)
+        self.card_items.clear()
+        self.card_photos.clear()
+        
         file_path = filedialog.askopenfilename(
-            title = "Select an image pls",
+            title="Select an image please",
             filetypes=[("Image Files", ("*.png", "*.jpg", "*.jpeg", "*.bmp", "*.gif"))]
         )
-
+        
         if file_path:
             img = Image.open(file_path)
-
-            max_size = (300, 300)
-            img.thumbnail(max_size, Image.Resampling.LANCZOS)
-            tk_img = ImageTk.PhotoImage(img)
-            self.image_label.config(image = tk_img)
-            self.image_label.image = tk_img
-
-
-            cards = image_model(img, imgsz=640, conf=0.3)
             
+            cards = image_model(img, imgsz=640, conf=0.3)
             detections = []
-
-            for card in cards :
+            for card in cards:
                 for box in card.boxes:
-
                     conf = float(box.conf[0]) if hasattr(box.conf, '__len__') else float(box.conf)
                     cls_id = int(box.cls[0]) if hasattr(box.cls, '__len__') else int(box.cls)
-
                     label = image_model.model.names[cls_id]
                     detections.append([label, conf])
-
-            detections.sort(key = lambda x: x[1], reverse = True)
+            detections.sort(key=lambda x: x[1], reverse=True)
             top_detections = detections[:9]
-
-            mapped_cards = []
-            for card in top_detections:
-                mapped_cards.append(cards_nums.get(card[0], -1))
-
+            
+            mapped_cards = [cards_nums.get(card[0], -1) for card in top_detections]
+            
             if len(mapped_cards) == 9:
                 try:
-                    trumpf_prediction = trumpf_model.predict_proba([mapped_cards])[0]
-                    top3 = trumpf_prediction.argsort()[-3:][::-1]
-                except:
-                    trumpf_predictions = None
-            else:
-                trumpf_predictions = None
-
-
-            cards_frame = tk.Frame(self.master)
-            cards_frame.pack(pady=10)
-
-            for card, conf in top_detections:
-                img_path = cards_images.get(card)
-                card_img = Image.open(img_path)
-                card_img.thumbnail((100, 150), Image.Resampling.LANCZOS)
-                tk_card_img = ImageTk.PhotoImage(card_img)
-                card_label = tk.Label(cards_frame, image=tk_card_img)
-                card_label.image = tk_card_img
-                card_label.pack(side=tk.LEFT, padx=5)
-
-            if len(mapped_cards) == 9:
-                cards_array = np.array(mapped_cards).reshape(1, -1)
-                trumpf_prediction = trumpf_model.predict(cards_array)
-                messagebox.showinfo("Trumpf Model Prediction", f"Prediction: {trumpf_prediction}")
+                    cards_array = np.array(mapped_cards).reshape(1, -1)
+                    trumpf_prediction = trumpf_model.predict(cards_array)
+                    messagebox.showinfo("Trumpf Model Prediction", f"Prediction: {trumpf_prediction}")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Prediction failed: {e}")
             else:
                 messagebox.showwarning("Invalid Card Detection", "Not all detected cards are valid for trumpf prediction.")
+            
+            card_width = 100
+            card_height = 150
+            card_spacing = 10
 
-        
+            num_cards_top = 5
+            top_x_start = (self.canvas_width - (num_cards_top * card_width + (num_cards_top - 1) * card_spacing)) / 2
+            top_y_position = self.canvas_height / 2 - card_height - 10
 
+            num_cards_bottom = 4
+            bottom_x_start = (self.canvas_width - (num_cards_bottom * card_width + (num_cards_bottom - 1) * card_spacing)) / 2
+            bottom_y_position = self.canvas_height / 2 + 10
+
+            for i, (card, conf) in enumerate(top_detections):
+                if i < num_cards_top:
+                    x = top_x_start + i * (card_width + card_spacing)
+                    y = top_y_position
+                else:
+                    x = bottom_x_start + (i - num_cards_top) * (card_width + card_spacing)
+                    y = bottom_y_position
+
+                img_path = cards_images.get(card)
+                if img_path and os.path.exists(img_path):
+                    card_img = Image.open(img_path)
+                    card_img = card_img.resize((card_width, card_height), Image.Resampling.LANCZOS)
+                    tk_card_img = ImageTk.PhotoImage(card_img)
+                    self.card_photos.append(tk_card_img)
+                    card_item = self.canvas.create_image(x, y, image=tk_card_img, anchor="nw")
+                    self.card_items.append(card_item)
+                else:
+                    print(f"Image path not found for card {card}")
 
 if __name__ == "__main__":
     root = tk.Tk()
