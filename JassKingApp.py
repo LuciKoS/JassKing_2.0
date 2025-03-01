@@ -110,7 +110,7 @@ class JassKingApp():
         self.canvas = tk.Canvas(master, width=self.canvas_width, height=self.canvas_height)
         self.canvas.place(relx=0.5, rely=0.5, anchor="center")
         
-        bg_image = Image.open("/Users/lucbaumeler/Downloads/bg3.png")
+        bg_image = Image.open("bg3.png")
         bg_image = bg_image.resize((self.canvas_width, self.canvas_height), Image.Resampling.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(bg_image)
         self.canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
