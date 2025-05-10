@@ -103,31 +103,232 @@ class JassKingApp():
     def __init__(self, master):
         self.master = master
         master.title("Jass King App")
-        master.geometry("800x600")
+        master.geometry("600x700")  # Reduced window size
         
-        self.canvas_width = 800
-        self.canvas_height = 600
+        # Add a frame for the uploaded image at the very top
+        self.uploaded_image_frame = tk.Frame(master)
+        self.uploaded_image_frame.pack(side=tk.TOP, pady=5)  # Reduced padding
+        self.uploaded_image_label = tk.Label(self.uploaded_image_frame)
+        self.uploaded_image_label.pack()
+        
+        # Store the uploaded image
+        self.uploaded_image = None
+        self.uploaded_image_photo = None
+        
+        # Upload button below the image
+        self.upload_button = tk.Button(master, text="Upload your hand", command=self.upload_image)
+        self.upload_button.pack(pady=5)  # Reduced padding
+        
+        # Canvas for cards below the upload button
+        self.canvas_width = 600  # Reduced canvas width
+        self.canvas_height = 400  # Reduced canvas height
         self.canvas = tk.Canvas(master, width=self.canvas_width, height=self.canvas_height)
-        self.canvas.place(relx=0.5, rely=0.5, anchor="center")
+        self.canvas.pack(pady=5)  # Reduced padding
         
         bg_image = Image.open("bg3.png")
         bg_image = bg_image.resize((self.canvas_width, self.canvas_height), Image.Resampling.LANCZOS)
         self.bg_photo = ImageTk.PhotoImage(bg_image)
         self.canvas.create_image(0, 0, image=self.bg_photo, anchor="nw")
         
-        # Upload button below the canvas
-        self.upload_button = tk.Button(master, text="Upload your hand", command=self.upload_image)
-        self.upload_button.pack(pady=10)
-        
         self.card_items = []
         self.card_photos = []
+        self.remove_buttons = []  # Store references to remove buttons
+        
+        # Add buttons at the bottom
+        self.button_frame = tk.Frame(master)
+        self.button_frame.pack(side=tk.BOTTOM, pady=10)
+        
+        self.add_card_button = tk.Button(self.button_frame, text="Add a Card", command=self.add_card)
+        self.add_card_button.pack(side=tk.LEFT, padx=5)
+        
+        self.predict_button = tk.Button(self.button_frame, text="Predict Again", command=self.predict_cards)
+        self.predict_button.pack(side=tk.LEFT, padx=5)
+        
+        # Store selected cards
+        self.selected_cards = []
 
-    def upload_image(self):
-        # Clear previous card images from the canvas
+    def add_card(self):
+        # Create a new window for card selection
+        card_window = tk.Toplevel(self.master)
+        card_window.title("Select a Card")
+        
+        # Create a canvas with scrollbar for the cards
+        canvas = tk.Canvas(card_window)
+        scrollbar = tk.Scrollbar(card_window, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Add all cards to the scrollable frame
+        row = 0
+        col = 0
+        for card_name, img_path in cards_images.items():
+            if os.path.exists(img_path):
+                card_img = Image.open(img_path)
+                card_img = card_img.resize((80, 120), Image.Resampling.LANCZOS)  # Reduced card size
+                tk_card_img = ImageTk.PhotoImage(card_img)
+                
+                # Keep reference to prevent garbage collection
+                if not hasattr(self, 'card_selection_photos'):
+                    self.card_selection_photos = []
+                self.card_selection_photos.append(tk_card_img)
+                
+                btn = tk.Button(scrollable_frame, image=tk_card_img, 
+                              command=lambda c=card_name: self.select_card(c, card_window))
+                btn.grid(row=row, column=col, padx=5, pady=5)
+                
+                col += 1
+                if col > 3:  # 4 cards per row
+                    col = 0
+                    row += 1
+        
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+    def select_card(self, card_name, window):
+        if len(self.selected_cards) < 9:
+            self.selected_cards.append(card_name)
+            self.display_cards()
+            window.destroy()
+        else:
+            messagebox.showwarning("Warning", "Maximum 9 cards allowed!")
+
+    def display_cards(self):
+        # Clear previous card images and remove buttons
         for item in self.card_items:
             self.canvas.delete(item)
+        for btn in self.remove_buttons:
+            btn.destroy()
+        
         self.card_items.clear()
         self.card_photos.clear()
+        self.remove_buttons.clear()
+        
+        card_width = 80
+        card_height = 120
+        card_spacing = 8
+
+        num_cards_top = 5
+        top_x_start = (self.canvas_width - (num_cards_top * card_width + (num_cards_top - 1) * card_spacing)) / 2
+        top_y_position = self.canvas_height / 2 - card_height - 5
+
+        num_cards_bottom = 4
+        bottom_x_start = (self.canvas_width - (num_cards_bottom * card_width + (num_cards_bottom - 1) * card_spacing)) / 2
+        bottom_y_position = self.canvas_height / 2 + 5
+
+        # Create a list of 9 cards, padding with None if needed
+        display_cards = self.selected_cards.copy()
+        while len(display_cards) < 9:
+            display_cards.append(None)
+
+        for i, card in enumerate(display_cards):
+            if i < num_cards_top:
+                x = top_x_start + i * (card_width + card_spacing)
+                y = top_y_position
+            else:
+                x = bottom_x_start + (i - num_cards_top) * (card_width + card_spacing)
+                y = bottom_y_position
+
+            if card is not None:  # If we have a real card
+                img_path = cards_images.get(card)
+                if img_path and os.path.exists(img_path):
+                    card_img = Image.open(img_path)
+                    card_img = card_img.resize((card_width, card_height), Image.Resampling.LANCZOS)
+                    tk_card_img = ImageTk.PhotoImage(card_img)
+                    self.card_photos.append(tk_card_img)
+                    card_item = self.canvas.create_image(x, y, image=tk_card_img, anchor="nw")
+                    self.card_items.append(card_item)
+                    
+                    # Create remove button for each card
+                    remove_btn = tk.Button(self.canvas, text="X", 
+                                         command=lambda idx=i: self.remove_card(idx),
+                                         bg='red', fg='white', width=1)
+                    remove_btn.place(x=x + card_width - 15, y=y + 3)
+                    self.remove_buttons.append(remove_btn)
+            else:  # If we need to display an empty card
+                # Create a blank card (gray rectangle)
+                card_item = self.canvas.create_rectangle(
+                    x, y, x + card_width, y + card_height,
+                    fill='gray', outline='black'
+                )
+                self.card_items.append(card_item)
+                
+                # Add a plus button for empty cards
+                add_btn = tk.Button(self.canvas, text="+", 
+                                  command=self.add_card,
+                                  bg='green', fg='white', width=1)
+                add_btn.place(x=x + card_width - 15, y=y + 3)
+                self.remove_buttons.append(add_btn)
+
+    def remove_card(self, index):
+        if 0 <= index < len(self.selected_cards):
+            self.selected_cards.pop(index)
+            self.display_cards()
+
+    def predict_cards(self):
+        if len(self.selected_cards) == 9:
+            try:
+                mapped_cards = [cards_nums.get(card, -1) for card in self.selected_cards]
+                # Create a list of 17 elements with commas between card numbers
+                full_input = []
+                for i, card in enumerate(mapped_cards):
+                    full_input.append(card)
+                    if i < 8:  # Add comma after each card except the last one
+                        full_input.append(17)  # 17 represents the comma in the model
+                
+                cards_array = np.array(full_input).reshape(1, -1)
+                
+                # Debug print
+                print("Input array shape:", cards_array.shape)
+                print("Input array:", cards_array)
+                
+                # Get prediction probabilities
+                trumpf_probs = trumpf_model.predict_proba(cards_array)[0]
+                
+                # Debug print
+                print("Probabilities shape:", trumpf_probs.shape)
+                print("Probabilities:", trumpf_probs)
+                
+                # Get top 3 predictions with their probabilities
+                top_3_indices = np.argsort(trumpf_probs)[-3:][::-1]  # Get indices of top 3 probabilities
+                top_3_predictions = []
+                
+                # Map indices to trump names (assuming 0=Eichel, 1=Rose, 2=Schilten, 3=Schelle)
+                trump_names = ["Eichel", "Rose", "Schilten", "Schelle"]
+                
+                for idx in top_3_indices:
+                    if idx < len(trump_names):  # Check if index is valid
+                        probability = trumpf_probs[idx] * 100  # Convert to percentage
+                        top_3_predictions.append(f"{trump_names[idx]}: {probability:.1f}%")
+                
+                # Create message with top 3 predictions
+                if top_3_predictions:
+                    message = "Top 3 Trump Predictions:\n\n" + "\n".join(top_3_predictions)
+                    messagebox.showinfo("Trumpf Model Prediction", message)
+                else:
+                    messagebox.showerror("Error", "No valid predictions were generated")
+                
+            except Exception as e:
+                print("Error details:", str(e))  # Debug print
+                messagebox.showerror("Error", f"Prediction failed: {str(e)}\nPlease check the console for details.")
+        else:
+            messagebox.showwarning("Invalid Card Selection", "Please select exactly 9 cards for prediction.")
+
+    def upload_image(self):
+        # Clear previous card images and remove buttons
+        for item in self.card_items:
+            self.canvas.delete(item)
+        for btn in self.remove_buttons:
+            btn.destroy()
+        self.card_items.clear()
+        self.card_photos.clear()
+        self.remove_buttons.clear()
         
         file_path = filedialog.askopenfilename(
             title="Select an image please",
@@ -135,42 +336,47 @@ class JassKingApp():
         )
         
         if file_path:
+            # Display the uploaded image
             img = Image.open(file_path)
+            img.thumbnail((300, 200))
+            self.uploaded_image = img
+            self.uploaded_image_photo = ImageTk.PhotoImage(img)
+            self.uploaded_image_label.configure(image=self.uploaded_image_photo)
             
             cards = image_model(img, imgsz=640, conf=0.3)
             detections = []
+            seen_cards = set()  # Keep track of unique cards
+            
             for card in cards:
                 for box in card.boxes:
                     conf = float(box.conf[0]) if hasattr(box.conf, '__len__') else float(box.conf)
                     cls_id = int(box.cls[0]) if hasattr(box.cls, '__len__') else int(box.cls)
                     label = image_model.model.names[cls_id]
-                    detections.append([label, conf])
+                    
+                    # Only add card if we haven't seen it before
+                    if label not in seen_cards:
+                        detections.append([label, conf])
+                        seen_cards.add(label)
+            
+            # Sort by confidence and take top 9 unique cards
             detections.sort(key=lambda x: x[1], reverse=True)
             top_detections = detections[:9]
             
-            mapped_cards = [cards_nums.get(card[0], -1) for card in top_detections]
+            # Update selected cards with detected cards
+            self.selected_cards = [card[0] for card in top_detections]
+            self.display_cards()
             
-            if len(mapped_cards) == 9:
-                try:
-                    cards_array = np.array(mapped_cards).reshape(1, -1)
-                    trumpf_prediction = trumpf_model.predict(cards_array)
-                    messagebox.showinfo("Trumpf Model Prediction", f"Prediction: {trumpf_prediction}")
-                except Exception as e:
-                    messagebox.showerror("Error", f"Prediction failed: {e}")
-            else:
-                messagebox.showwarning("Invalid Card Detection", "Not all detected cards are valid for trumpf prediction.")
-            
-            card_width = 100
-            card_height = 150
-            card_spacing = 10
+            card_width = 80  # Reduced card width
+            card_height = 120  # Reduced card height
+            card_spacing = 8  # Reduced spacing
 
             num_cards_top = 5
             top_x_start = (self.canvas_width - (num_cards_top * card_width + (num_cards_top - 1) * card_spacing)) / 2
-            top_y_position = self.canvas_height / 2 - card_height - 10
+            top_y_position = self.canvas_height / 2 - card_height - 5  # Reduced spacing
 
             num_cards_bottom = 4
             bottom_x_start = (self.canvas_width - (num_cards_bottom * card_width + (num_cards_bottom - 1) * card_spacing)) / 2
-            bottom_y_position = self.canvas_height / 2 + 10
+            bottom_y_position = self.canvas_height / 2 + 5  # Reduced spacing
 
             for i, (card, conf) in enumerate(top_detections):
                 if i < num_cards_top:
